@@ -1,0 +1,138 @@
+plugins {
+    id 'java'
+    id 'jacoco'
+    id 'maven'
+    id 'signing'
+    id 'com.github.hierynomus.license' version '0.11.0'
+}
+
+group = 'com.github.lukaszbudnik.order-preserver'
+archivesBaseName = 'order-preserver'
+version = '1.0.0'
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+repositories {
+    mavenCentral()
+
+    maven {
+        url 'http://repository.apache.org/content/repositories/snapshots'
+    }
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.enabled false
+        csv.enabled false
+        html.destination "${buildDir}/jacocoHtml"
+    }
+}
+
+test {
+    reports {
+        junitXml.enabled = true
+        html.enabled = true
+    }
+}
+
+dependencies {
+    testCompile 'junit:junit:4.12'
+}
+
+license {
+    header project.file('HEADER')
+
+    ext.year = Calendar.getInstance().get(Calendar.YEAR)
+    ext.name = 'Łukasz Budnik'
+    ext.email = 'lukasz.budnik@gmail.com'
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task testJar(type: Jar) {
+    classifier = 'tests'
+    from sourceSets.test.allSource
+}
+
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
+
+task printTestErrors {
+    def xmlReports = new File("${buildDir}/test-results")
+    if (xmlReports.exists()) {
+        xmlReports.eachFileMatch(groovy.io.FileType.FILES, ~/TEST\-.*\.xml/) {
+            def testsuite = new groovy.util.XmlParser().parse(it)
+            testsuite.testcase.findAll {
+                it.failure.size() > 0
+            }.each {
+                println it
+            }
+        }
+    }
+}
+
+artifacts {
+    archives javadocJar, sourcesJar, testJar
+}
+
+signing {
+    required { gradle.taskGraph.hasTask("uploadArchives") }
+    sign configurations.archives
+}
+
+def deployUsername = hasProperty('ossrhUsername') ? ossrhUsername : System.getenv('DEPLOY_USERNAME')
+
+def deployPassword = hasProperty('ossrhPassword') ? ossrhPassword : System.getenv('DEPLOY_PASSWORD')
+
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+            repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                authentication(userName: deployUsername, password: deployPassword)
+            }
+
+            snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                authentication(userName: deployUsername, password: deployPassword)
+            }
+
+            pom.project {
+                name 'order-preserver'
+                packaging 'jar'
+                // optionally artifactId can be defined here
+                description 'Simple Java 8 library which makes it super easy to preserve order of lists before/after parallel processing.'
+                url 'https://github.com/lukaszbudnik/order-preserver'
+
+                scm {
+                    connection 'scm:git:git@github.com:lukaszbudnik/order-preserver.git'
+                    developerConnection 'scm:git:git@github.com:lukaszbudnik/order-preserver.git'
+                    url 'git@github.com:lukaszbudnik/order-preserver.git'
+                }
+
+                licenses {
+                    license {
+                        name 'The Apache License, Version 2.0'
+                        url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id 'lukaszbudnik'
+                        name 'Łukasz Budnik'
+                        email 'lukasz.budnik@gmail.com'
+                    }
+                }
+            }
+        }
+    }
+}
